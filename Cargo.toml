@@ -1,0 +1,25 @@
+[package]
+name = "bioswarm-engine"
+version = "2.0.0"
+edition = "2021"
+authors = ["Sayuru's OpenClaw Bot <sayuru.akash@gmail.com>"]
+description = "BioSwarm v2.0 - Multi-Source Intelligence Engine"
+license = "MIT"
+rust-version = "1.75"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4"] }
+
+[[bin]]
+name = "bioswarm"
+path = "src/main.rs"
+
+[[bin]]
+name = "bioswarm-server"
+path = "src/server.rs"
