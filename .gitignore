@@ -33,6 +33,12 @@ target/
 /tmp/*.json
 /tmp/*.txt
 
+# Local runtime data
+bioswarm.db
+*.db
+*.sqlite
+*.sqlite3
+
 # OS files
 Thumbs.db
 

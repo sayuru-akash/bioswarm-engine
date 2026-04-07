@@ -1,12 +1,44 @@
-# 🏆 BioSwarm Engine v2.0
+# 🏆 BioSwarm Engine v3.0
 
-**Multi-Source Intelligence Swarm with Real-Time Web Search**
+**Multi-Source Intelligence Swarm with Real-Time Web Search & Persistent Storage**
 
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
 
-> **14 parallel agents** gathering fresh intelligence using **Exa Web Search** + **Fireworks AI** (Kimi K2.5 Turbo)
+> **14 parallel agents** gathering fresh intelligence using **Exa Web Search** + **Fireworks AI** (Kimi K2.5 Turbo)  
+> Now with **SQLite persistence**, **recursive agents**, and **6 export formats**
+
+---
+
+## ✨ What's New in v3.0
+
+### 🗃️ **SQLite Database**
+- Persistent storage of all swarm executions
+- Checkpoint system for resume capability
+- Trend analysis across multiple runs
+- Automatic database creation on first run
+
+### 🔄 **Recursive Agent Spawning**
+- Agents can spawn sub-agents for deeper research
+- Configurable recursion depth
+- Automatic checkpoint at each level
+- Graceful degradation on API failures
+
+### 📊 **6 Export Formats**
+- **Markdown** (default) - Human-readable reports
+- **JSON** - API consumption / automation
+- **HTML** - Beautiful web-ready pages
+- **CSV** - Data analysis / spreadsheets
+- **Excel** (.xlsx) - Rich data tables
+- **PDF** - Professional styled documents
+
+### 🎯 **Enhanced Intelligence**
+- **Trend Analysis** - Track changes over time
+- **Action Items** - Auto-extract to-do lists
+- **Visual Charts** - ASCII terminal charts
+- **Executive Summary** - Auto-generated TL;DR
 
 ---
 
@@ -14,7 +46,8 @@
 
 ```bash
 # 1. Clone and enter directory
-cd bioswarm-v2
+git clone https://github.com/sayuru-akash/bioswarm-engine.git
+cd bioswarm-engine
 
 # 2. Set up environment (copy and fill in your keys)
 cp .env.sample .env
@@ -24,10 +57,16 @@ cp .env.sample .env
 cargo build --release
 
 # 4. Run the swarm
-./target/release/bioswarm-v2
+./target/release/bioswarm
 
-# 5. Check output
-cat /tmp/bioswarm_v2_report.md
+# 5. Check outputs
+ls /tmp/bioswarm_*
+# bioswarm_{id}.md    # Markdown report
+# bioswarm_{id}.json  # JSON data
+# bioswarm_{id}.html  # HTML report
+# bioswarm_{id}.csv   # CSV data
+# bioswarm_{id}.xlsx  # Excel file
+# bioswarm_{id}.pdf   # PDF document
 ```
 
 ---
@@ -43,45 +82,49 @@ cat /tmp/bioswarm_v2_report.md
 
 ## 🎯 What It Does
 
-BioSwarm v2.0 orchestrates **14 specialist agents** in parallel:
+BioSwarm v3.0 orchestrates **14 specialist agents** with **recursive spawning** and **persistent storage**:
 
-| Agent | Function | Data Source |
-|-------|----------|-------------|
-| DeepResearcher | Market trends & AI adoption | Exa + Fireworks |
-| GapAnalyzer | Market void identification | Exa + Fireworks |
-| OpportunityScorer | ROI-ranked opportunities | Fireworks |
-| CompetitorTracker | Rival intelligence | Exa + Fireworks |
-| InnovationScout | Emerging tech tracking | Exa + Fireworks |
-| StrategyFormulator | Action roadmaps | Fireworks |
-| QualityValidator | Cross-check validation | Fireworks |
-| DeploymentTester | Feasibility assessment | Fireworks |
-| SentimentAnalyzer | Market mood analysis | Exa + Fireworks |
-| PricingIntelligence | Rate benchmarking | Exa + Fireworks |
-| TalentScout | Hiring intelligence | Exa + Fireworks |
-| FundingTracker | Investment tracking | Exa + Fireworks |
-| RegulatoryWatcher | Compliance monitoring | Exa + Fireworks |
-| ClientIntelligence | Account signal analysis | Fireworks |
+| Agent | Function | Features |
+|-------|----------|----------|
+| DeepResearcher | Market trends & AI adoption | Exa + Fireworks + Recursive |
+| GapAnalyzer | Market void identification | Exa + Fireworks + Trends |
+| OpportunityScorer | ROI-ranked opportunities | Fireworks + Checkpoints |
+| CompetitorTracker | Rival intelligence | Exa + Fireworks + Database |
+| InnovationScout | Emerging tech tracking | Exa + Fireworks + Recursive |
+| StrategyFormulator | Action roadmaps | Fireworks + PDF Export |
+| QualityValidator | Cross-check validation | Fireworks + SQLite |
+| DeploymentTester | Feasibility assessment | Fireworks + Trend Analysis |
+| SentimentAnalyzer | Market mood analysis | Exa + Fireworks + Charts |
+| PricingIntelligence | Rate benchmarking | Exa + Fireworks + CSV Export |
+| TalentScout | Hiring intelligence | Exa + Fireworks + Excel Export |
+| FundingTracker | Investment tracking | Exa + Fireworks + JSON Export |
+| RegulatoryWatcher | Compliance monitoring | Exa + Fireworks + HTML Export |
+| ClientIntelligence | Account signal analysis | Fireworks + Resume Capability |
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│              BioSwarm Engine v2.0                    │
-├──────────────────────────────────────────────────────┤
-│  CLI Layer (main.rs)  →  API Layer (server.rs)       │
-├──────────────────────────────────────────────────────┤
-│           Orchestrator (orchestrator.rs)             │
-│              Parallel Agent Spawning                 │
-├──────────────────────────────────────────────────────┤
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐    │
-│  │ Agent 1 │ │ Agent 2 │ │   ...   │ │ Agent 14│    │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘    │
-├──────────────────────────────────────────────────────┤
-│         Exa API          │      Fireworks API        │
-│     (Web Search)         │   (Kimi K2.5 Turbo)       │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                 BioSwarm Engine v3.0                         │
+├──────────────────────────────────────────────────────────────┤
+│  CLI Layer (main.rs)  →  API Layer (server.rs)               │
+├──────────────────────────────────────────────────────────────┤
+│             Orchestrator (orchestrator.rs)                   │
+│        Parallel Agent Spawning + Checkpointing               │
+├──────────────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          │
+│  │ Agent 1 │ │ Agent 2 │ │   ...   │ │ Agent 14│          │
+│  │ + Sub   │ │ + Sub   │ │ + Sub   │ │ + Sub   │          │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘          │
+├──────────────────────────────────────────────────────────────┤
+│     Exa API              │       Fireworks API              │
+│   (Web Search)           │    (Kimi K2.5 Turbo)             │
+├──────────────────────────────────────────────────────────────┤
+│  SQLite Database │ Exports │ Templates │ Utils │ Trends   │
+│    bioswarm.db   │ 6 formats│ Markdown │ Charts │ Analysis│
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -89,24 +132,29 @@ BioSwarm v2.0 orchestrates **14 specialist agents** in parallel:
 ## 📁 Project Structure
 
 ```
-bioswarm-v2/
+bioswarm-engine/
 ├── Cargo.toml              # Dependencies & metadata
 ├── Cargo.lock              # Locked dependency versions
 ├── README.md               # This file
 ├── LICENSE                 # MIT License
+├── CHANGELOG.md            # Version history
 ├── .gitignore             # Git ignore rules
 ├── .env.sample            # Environment template (NO REAL KEYS)
+├── Makefile               # Build automation
 ├── src/
 │   ├── main.rs            # CLI entry point
 │   ├── server.rs          # API server entry (optional)
-│   ├── lib.rs             # Core engine
+│   ├── lib.rs             # Core engine with orchestration
 │   ├── models.rs          # Data structures
 │   ├── search.rs          # API clients (Exa + Fireworks)
-│   ├── orchestrator.rs    # Parallel execution
+│   ├── orchestrator.rs    # Recursive agent spawning + checkpoints
 │   ├── agents.rs          # Agent implementations
-│   └── config.rs          # Configuration
-├── tests/                 # Integration tests
-└── docs/                  # Documentation
+│   ├── config.rs          # Configuration
+│   ├── database.rs        # SQLite persistence (NEW v3.0)
+│   ├── exports.rs         # Multiple format exports (NEW v3.0)
+│   ├── templates.rs       # Report templates (NEW v3.0)
+│   └── utils.rs           # Charts & summary generation (NEW v3.0)
+└── tests/                 # Integration tests
 ```
 
 ---
@@ -125,6 +173,7 @@ EXA_API_KEY=your_exa_api_key_here
 # Optional settings
 RUST_LOG=info
 RATE_LIMIT_RPM=60
+DATABASE_PATH=./bioswarm.db
 ```
 
 **⚠️ Never commit `.env` with real keys!**
@@ -151,6 +200,11 @@ cargo clippy -- -D warnings
 
 # Release build (optimized)
 cargo build --release
+
+# Make build (uses Makefile)
+make build
+make run
+make clean
 ```
 
 ---
@@ -159,36 +213,46 @@ cargo build --release
 
 | Metric | Value |
 |--------|-------|
-| **Agents** | 14 parallel |
+| **Agents** | 14 parallel + recursive sub-agents |
 | **Execution Time** | ~36-50 seconds |
-| **Binary Size** | ~2.1MB (release) |
+| **Binary Size** | ~4.2MB (release) |
 | **Memory Usage** | ~50MB |
 | **Build Time** | ~60-70 seconds |
 | **Rate Limit** | 60 RPM (configurable) |
+| **Database** | SQLite (auto-created) |
+| **Export Formats** | 6 formats |
 
 ---
 
 ## 🔒 Security
 
 - **No hardcoded keys** - All API keys via environment
-- **No sensitive data in repo** - `.env` is gitignored
+- **No sensitive data in repo** - `.env` and `*.db` are gitignored
 - **Rate limiting** - Built-in token bucket
 - **Non-root Docker** - Production deployment ready
+- **No API keys exposed** - Only `.env.sample` committed
 
 ---
 
 ## 📝 Output
 
-Generates comprehensive markdown report:
-- Market trends & analysis
-- Competitive intelligence
-- Emerging technologies
-- Talent market data
-- Funding landscape
-- Regulatory updates
-- Strategic recommendations
+### Generated Files
 
-Output saved to: `/tmp/bioswarm_v2_report.md`
+| Format | Extension | Purpose |
+|--------|-----------|---------|
+| Markdown | `.md` | Human-readable reports |
+| JSON | `.json` | API consumption / automation |
+| HTML | `.html` | Web-ready pages |
+| CSV | `.csv` | Data analysis / spreadsheets |
+| Excel | `.xlsx` | Rich data tables |
+| PDF | `.pdf` | Professional documents |
+
+### Database
+
+- **Location**: `bioswarm.db` (or `DATABASE_PATH` env var)
+- **Tables**: Executions, Checkpoints, Trends, Action Items
+- **Resume**: Automatic recovery from last checkpoint
+- **Analysis**: Query historical data for trends
 
 ---
 
@@ -213,10 +277,11 @@ MIT License - see [LICENSE](LICENSE) file
 - [Fireworks AI](https://fireworks.ai) - Kimi K2.5 Turbo API
 - [Exa AI](https://exa.ai) - Web search API
 - [Tokio](https://tokio.rs) - Async runtime
+- [Rusqlite](https://github.com/rusqlite/rusqlite) - SQLite integration
 - [Rust](https://www.rust-lang.org) - Programming language
 
 ---
 
 **Built with 💛 by Sayuru's OpenClaw Bot ❤️**
 
-*Production-ready multi-source intelligence engine*
+*Production-ready multi-source intelligence engine with persistent storage*
