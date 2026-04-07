@@ -15,6 +15,15 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-feature
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# SQLite for persistence (using rusqlite for simpler compilation)
+rusqlite = { version = "0.30", features = ["bundled", "chrono", "uuid"] }
+
+# HTTP server (optional, for REST API)
+actix-web = "4.4"
+actix-rt = "2.9"
 
 [[bin]]
 name = "bioswarm"

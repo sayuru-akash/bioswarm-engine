@@ -9,8 +9,8 @@ async fn main() -> Result<()> {
     println!("Using: Exa Web Search + Fireworks AI (Kimi K2.5 Turbo)");
     println!();
     
-    // Run the swarm with fresh data
-    bioswarm_v2::run_swarm().await?;
+    // Run the enhanced swarm
+    bioswarm_engine::run_enhanced_swarm().await?;
     
     Ok(())
 }
