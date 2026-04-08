@@ -1,0 +1,18 @@
+---
+source: tests/snapshots.rs
+assertion_line: 54
+expression: sample_report().to_markdown()
+---
+# Test Report
+
+summary
+
+## Action items
+
+- Action
+
+## Agent findings
+
+### DeepResearcher
+
+A sample output

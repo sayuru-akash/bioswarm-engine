@@ -1,154 +1,128 @@
-//! Enhanced BioSwarm Engine v3.0 - Recursive Intelligence with Persistence
-//! Full-featured standalone CLI tool
-
 pub mod agents;
-pub mod models;
-pub mod orchestrator;
-pub mod search;
 pub mod config;
 pub mod database;
 pub mod exports;
+pub mod models;
+pub mod orchestrator;
+pub mod search;
 pub mod templates;
 pub mod utils;
 
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
-pub async fn run_enhanced_swarm() -> Result<()> {
-    info!("🚀 BioSwarm v3.0 Enhanced - Initializing...");
-    
-    // Initialize database
-    let db = database::Database::new("bioswarm.db").await?;
-    info!("✅ SQLite database initialized");
-    
-    // Initialize search clients
-    let search_client = Arc::new(search::ExaSearchClient::new()?);
-    let ai_client = Arc::new(search::FireworksClient::new()?);
-    info!("✅ Search clients ready (Exa + Fireworks)");
-    
-    // Check for resumable runs
-    if let Some(checkpoint) = db.get_latest_checkpoint().await? {
-        warn!("Found checkpoint from previous run - resuming...");
-        return resume_from_checkpoint(db, search_client, ai_client, checkpoint).await;
+pub async fn execute_run(config: config::RuntimeConfig) -> Result<models::EnhancedReport> {
+    let db = database::Database::new(&config.database_path).await?;
+    let search_client = Arc::new(search::ExaSearchClient::new(config.exa_api_key.clone())?);
+    let ai_client = Arc::new(search::FireworksClient::new(
+        config.fireworks_api_key.clone(),
+    )?);
+    let checkpoint = db.get_latest_checkpoint().await?;
+    let execution_id = checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.execution_id.clone())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    let results = if let Some(checkpoint) = checkpoint {
+        if checkpoint.query == config.query {
+            orchestrator::resume_swarm(&db, &search_client, &ai_client, &config, &checkpoint)
+                .await?
+        } else {
+            orchestrator::run_enhanced_swarm(
+                &db,
+                &search_client,
+                &ai_client,
+                &config,
+                &execution_id,
+            )
+            .await?
+        }
+    } else {
+        orchestrator::run_enhanced_swarm(&db, &search_client, &ai_client, &config, &execution_id)
+            .await?
+    };
+
+    let report = generate_report(&db, &results, &config).await?;
+    db.store_execution(&results, &report).await?;
+    let written = exports::export_formats(
+        &report,
+        &results.execution_id,
+        &config.output_dir,
+        &config.formats,
+    )
+    .await?;
+    for path in written {
+        info!("wrote {}", path.display());
     }
-    
-    // Start fresh swarm
-    info!("🤖 Spawning 14 enhanced agents with recursive capability...");
-    let execution_id = uuid::Uuid::new_v4().to_string();
-    
-    // Run enhanced parallel swarm with smart orchestration
-    let results = orchestrator::run_enhanced_swarm(
-        &db,
-        &search_client,
-        &ai_client,
-        &execution_id
-    ).await?;
-    
-    info!("\n✅ Swarm execution complete!");
-    
-    // Generate enhanced report
-    let report = generate_enhanced_report(&db, &results).await?;
-    
-    // Export to all formats
-    exports::export_all_formats(&report, &execution_id).await?;
-    
-    // Store in database
-    db.store_execution(&execution_id, &results, &report).await?;
-    
-    info!("\n📊 EXECUTION SUMMARY");
-    info!("====================");
-    info!("Execution ID: {}", execution_id);
-    info!("Agents: 14/14 successful");
-    info!("Database: bioswarm.db");
-    info!("Exports: PDF, Excel, DOCX, JSON, HTML, Markdown");
-    info!("Templates: Applied");
-    info!("Visual Charts: Generated");
-    
-    Ok(())
+    Ok(report)
 }
 
-async fn resume_from_checkpoint(
-    db: database::Database,
-    search_client: Arc<search::ExaSearchClient>,
-    ai_client: Arc<search::FireworksClient>,
-    checkpoint: models::Checkpoint,
-) -> Result<()> {
-    info!("🔄 Resuming from checkpoint: {}", checkpoint.execution_id);
-    info!("⏳ {} agents completed, {} remaining", 
-        checkpoint.completed_agents.len(),
-        checkpoint.remaining_agents.len()
-    );
-    
-    // Resume swarm from checkpoint
-    let results = orchestrator::resume_swarm(
-        &db,
-        &search_client,
-        &ai_client,
-        &checkpoint
-    ).await?;
-    
-    // Continue with report generation
-    let report = generate_enhanced_report(&db, &results).await?;
-    exports::export_all_formats(&report, &checkpoint.execution_id).await?;
-    db.store_execution(&checkpoint.execution_id, &results, &report).await?;
-    
-    info!("✅ Resumed execution completed!");
-    Ok(())
+pub async fn export_existing(
+    execution_id: &str,
+    db_path: &std::path::Path,
+    output_dir: &std::path::Path,
+    formats: &[config::ExportFormat],
+) -> Result<Vec<std::path::PathBuf>> {
+    let db = database::Database::new(db_path).await?;
+    let report = db
+        .load_execution_report(execution_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("execution {execution_id} not found"))?;
+    exports::export_formats(&report, execution_id, output_dir, formats).await
 }
 
-async fn generate_enhanced_report(
+pub async fn history(db_path: &std::path::Path, limit: usize) -> Result<Vec<models::RunSummary>> {
+    database::Database::new(db_path)
+        .await?
+        .list_runs(limit)
+        .await
+}
+
+pub async fn status(
+    db_path: &std::path::Path,
+) -> Result<(Vec<models::RunSummary>, Option<models::Checkpoint>)> {
+    let db = database::Database::new(db_path).await?;
+    let runs = db.list_runs(5).await?;
+    let checkpoint = db.get_latest_checkpoint().await?;
+    Ok((runs, checkpoint))
+}
+
+async fn generate_report(
     db: &database::Database,
-    results: &orchestrator::SwarmResults,
+    results: &models::SwarmResults,
+    config: &config::RuntimeConfig,
 ) -> Result<models::EnhancedReport> {
-    use templates::ReportTemplate;
-    
-    // Apply template
-    let template = ReportTemplate::default();
-    
-    // Get trend analysis
     let trends = db.analyze_trends().await?;
-    
-    // Generate executive summary
     let summary = utils::generate_executive_summary(results, &trends).await?;
-    
-    // Extract action items
     let action_items = utils::extract_action_items(results).await?;
-    
-    // Create visual charts
     let charts = utils::generate_ascii_charts(results).await?;
-    
-    // Build full report
-    let report = models::EnhancedReport {
-        title: "BioSwarm v3.0 - Enhanced Intelligence Report".to_string(),
+    let confidence_score = utils::confidence_score(results);
+    Ok(models::EnhancedReport {
+        title: format!("BioSwarm v3.0 report - {}", config.query),
         execution_id: results.execution_id.clone(),
-        timestamp: chrono::Utc::now(),
+        timestamp: results.timestamp,
         summary,
         trends,
         action_items,
         charts,
         agent_outputs: results.agent_outputs.clone(),
-        export_formats: vec![
-            "PDF".to_string(),
-            "Excel".to_string(),
-            "DOCX".to_string(),
-            "JSON".to_string(),
-            "HTML".to_string(),
-            "Markdown".to_string(),
-        ],
-    };
-    
-    Ok(report)
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Setup tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_target(false)
-        .compact()
-        .init();
-    
-    run_enhanced_swarm().await
+        export_formats: config
+            .formats
+            .iter()
+            .map(|fmt| format!("{:?}", fmt))
+            .collect(),
+        confidence_score,
+        metadata: models::RunMetadata {
+            query: config.query.clone(),
+            agent_count: config.agents.len(),
+            formats: config
+                .formats
+                .iter()
+                .map(|fmt| format!("{:?}", fmt))
+                .collect(),
+            output_dir: config.output_dir.display().to_string(),
+            resumed: false,
+        },
+    })
 }

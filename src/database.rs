@@ -1,181 +1,230 @@
-//! Database layer for BioSwarm v3.0 - SQLite persistence with rusqlite
+use crate::models::{Checkpoint, EnhancedReport, RunSummary, SwarmResults, Trend, TrendAnalysis};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
+#[derive(Clone)]
 pub struct Database {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl Database {
     pub async fn new<P: AsRef<Path>>(database_path: P) -> Result<Self> {
-        let conn = Connection::open(database_path)
-            .context("Failed to open SQLite database")?;
-        
-        // Initialize schema
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS executions (
+        let conn = Connection::open(database_path).context("failed to open SQLite database")?;
+        let db = Self {
+            conn: Arc::new(Mutex::new(conn)),
+        };
+        db.run_migrations().await?;
+        Ok(db)
+    }
+
+    pub async fn run_migrations(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch(
+            "BEGIN;
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, CURRENT_TIMESTAMP);
+
+            CREATE TABLE IF NOT EXISTS executions (
                 id TEXT PRIMARY KEY,
                 timestamp TEXT NOT NULL,
+                query TEXT NOT NULL,
                 duration_ms INTEGER NOT NULL,
                 total_tokens INTEGER NOT NULL,
+                confidence_score INTEGER NOT NULL,
                 status TEXT NOT NULL,
-                report_markdown TEXT,
-                report_json TEXT
-            )",
-            [],
-        )?;
-        
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS agent_outputs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                execution_id TEXT NOT NULL,
-                agent_name TEXT NOT NULL,
-                content TEXT NOT NULL,
-                confidence INTEGER NOT NULL,
-                duration_ms INTEGER NOT NULL
-            )",
-            [],
-        )?;
-        
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS checkpoints (
+                report_markdown TEXT NOT NULL,
+                report_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS checkpoints (
                 execution_id TEXT PRIMARY KEY,
+                query TEXT NOT NULL,
                 completed_agents TEXT NOT NULL,
                 remaining_agents TEXT NOT NULL,
                 partial_results TEXT NOT NULL,
                 timestamp TEXT NOT NULL
-            )",
-            [],
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_outputs (
+                execution_id TEXT NOT NULL,
+                agent_name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                confidence INTEGER NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                sources_json TEXT NOT NULL,
+                PRIMARY KEY (execution_id, agent_name)
+            );
+            COMMIT;"
         )?;
-        
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS trends (
-                metric_name TEXT PRIMARY KEY,
-                current_value REAL NOT NULL,
-                previous_value REAL,
-                change_percent REAL,
-                last_updated TEXT NOT NULL
-            )",
-            [],
-        )?;
-        
-        Ok(Self { conn })
+        Ok(())
     }
-    
+
     pub async fn store_execution(
         &self,
-        execution_id: &str,
-        results: &crate::orchestrator::SwarmResults,
-        report: &crate::models::EnhancedReport,
+        results: &SwarmResults,
+        report: &EnhancedReport,
     ) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO executions (id, timestamp, duration_ms, total_tokens, status, report_markdown, report_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(id) DO UPDATE SET
-             timestamp=excluded.timestamp, duration_ms=excluded.duration_ms,
-             total_tokens=excluded.total_tokens, status=excluded.status,
-             report_markdown=excluded.report_markdown, report_json=excluded.report_json",
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO executions (id, timestamp, query, duration_ms, total_tokens, confidence_score, status, report_markdown, report_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                execution_id,
-                Utc::now().to_rfc3339(),
+                results.execution_id,
+                results.timestamp.to_rfc3339(),
+                results.query,
                 results.duration_ms as i64,
                 results.total_tokens as i64,
+                report.confidence_score as i64,
                 "completed",
                 report.to_markdown(),
                 serde_json::to_string(report)?
             ],
         )?;
-        
-        for (agent_name, output) in &results.agent_outputs {
-            self.conn.execute(
-                "INSERT INTO agent_outputs (execution_id, agent_name, content, confidence, duration_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT DO NOTHING",
-                params![execution_id, agent_name, output, 75i64, 35000i64],
+
+        for output in results.agent_outputs.values() {
+            conn.execute(
+                "INSERT OR REPLACE INTO agent_outputs (execution_id, agent_name, content, confidence, duration_ms, sources_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    results.execution_id,
+                    output.agent_name,
+                    output.content,
+                    output.confidence as i64,
+                    output.duration_ms as i64,
+                    serde_json::to_string(&output.sources)?
+                ],
             )?;
         }
-        
+
+        conn.execute(
+            "DELETE FROM checkpoints WHERE execution_id = ?1",
+            params![results.execution_id.clone()],
+        )?;
         Ok(())
     }
-    
-    pub async fn get_latest_checkpoint(&self) -> Result<Option<crate::models::Checkpoint>> {
-        let result = self.conn.query_row(
-            "SELECT execution_id, completed_agents, remaining_agents, partial_results
-             FROM checkpoints
-             ORDER BY timestamp DESC
-             LIMIT 1",
-            [],
-            |row| {
-                Ok(crate::models::Checkpoint {
-                    execution_id: row.get(0)?,
-                    completed_agents: serde_json::from_str(row.get::<_, String>(1)?.as_str()).unwrap_or_default(),
-                    remaining_agents: serde_json::from_str(row.get::<_, String>(2)?.as_str()).unwrap_or_default(),
-                    partial_results: serde_json::from_str(row.get::<_, String>(3)?.as_str()).unwrap_or_default(),
-                })
-            },
-        ).optional()?;
-        
-        Ok(result)
-    }
-    
-    pub async fn save_checkpoint(&self, checkpoint: &crate::models::Checkpoint) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO checkpoints (execution_id, completed_agents, remaining_agents, partial_results, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(execution_id) DO UPDATE SET
-             completed_agents=excluded.completed_agents,
-             remaining_agents=excluded.remaining_agents,
-             partial_results=excluded.partial_results,
-             timestamp=excluded.timestamp",
+
+    pub async fn save_checkpoint(&self, checkpoint: &Checkpoint) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO checkpoints (execution_id, query, completed_agents, remaining_agents, partial_results, timestamp)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
-                &checkpoint.execution_id,
+                checkpoint.execution_id,
+                checkpoint.query,
                 serde_json::to_string(&checkpoint.completed_agents)?,
                 serde_json::to_string(&checkpoint.remaining_agents)?,
                 serde_json::to_string(&checkpoint.partial_results)?,
-                Utc::now().to_rfc3339()
+                checkpoint.timestamp.to_rfc3339(),
             ],
         )?;
-        
         Ok(())
     }
-    
-    pub async fn analyze_trends(&self) -> Result<crate::models::TrendAnalysis> {
-        let mut stmt = self.conn.prepare(
-            "SELECT metric_name, current_value, previous_value
-             FROM trends
-             ORDER BY last_updated DESC"
+
+    pub async fn get_latest_checkpoint(&self) -> Result<Option<Checkpoint>> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT execution_id, query, completed_agents, remaining_agents, partial_results, timestamp
+             FROM checkpoints ORDER BY timestamp DESC LIMIT 1",
+            [],
+            |row| {
+                let timestamp: String = row.get(5)?;
+                Ok(Checkpoint {
+                    execution_id: row.get(0)?,
+                    query: row.get(1)?,
+                    completed_agents: serde_json::from_str(&row.get::<_, String>(2)?).unwrap_or_default(),
+                    remaining_agents: serde_json::from_str(&row.get::<_, String>(3)?).unwrap_or_default(),
+                    partial_results: serde_json::from_str(&row.get::<_, String>(4)?).unwrap_or_default(),
+                    timestamp: DateTime::parse_from_rfc3339(&timestamp).map(|dt| dt.with_timezone(&Utc)).unwrap_or_else(|_| Utc::now()),
+                })
+            },
+        ).optional().map_err(Into::into)
+    }
+
+    pub async fn load_execution_report(
+        &self,
+        execution_id: &str,
+    ) -> Result<Option<EnhancedReport>> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT report_json FROM executions WHERE id = ?1",
+            params![execution_id],
+            |row| {
+                let json: String = row.get(0)?;
+                serde_json::from_str(&json).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    pub async fn list_runs(&self, limit: usize) -> Result<Vec<RunSummary>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, timestamp, query, status, duration_ms, total_tokens, confidence_score
+             FROM executions ORDER BY timestamp DESC LIMIT ?1",
         )?;
-        
-        let rows = stmt.query_map([], |row| {
-            let name: String = row.get(0)?;
-            let current: f64 = row.get(1)?;
-            let previous: Option<f64> = row.get(2)?;
-            
-            let change = if let Some(prev) = previous {
-                if prev != 0.0 {
-                    ((current - prev) / prev) * 100.0
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            };
-            
-            Ok((name, crate::models::Trend {
-                current_value: current,
-                change_percent: change,
-            }))
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            let timestamp: String = row.get(1)?;
+            Ok(RunSummary {
+                execution_id: row.get(0)?,
+                timestamp: DateTime::parse_from_rfc3339(&timestamp)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                query: row.get(2)?,
+                status: row.get(3)?,
+                duration_ms: row.get::<_, i64>(4)? as u64,
+                total_tokens: row.get::<_, i64>(5)? as u64,
+                confidence_score: row.get::<_, i64>(6)? as u8,
+            })
         })?;
-        
-        let mut trends = HashMap::new();
-        for row in rows {
-            let (name, trend) = row?;
-            trends.insert(name, trend);
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub async fn analyze_trends(&self) -> Result<TrendAnalysis> {
+        let runs = self.list_runs(2).await?;
+        let mut trends = BTreeMap::new();
+        let mut delta_summary = Vec::new();
+        if let Some(current) = runs.first() {
+            let previous = runs.get(1);
+            let previous_tokens = previous.map(|run| run.total_tokens as f64);
+            let change_percent = previous_tokens
+                .map(|prev| {
+                    if prev == 0.0 {
+                        0.0
+                    } else {
+                        ((current.total_tokens as f64 - prev) / prev) * 100.0
+                    }
+                })
+                .unwrap_or(0.0);
+            trends.insert(
+                "total_tokens".to_string(),
+                Trend {
+                    current_value: current.total_tokens as f64,
+                    previous_value: previous_tokens,
+                    change_percent,
+                },
+            );
+            delta_summary.push(format!(
+                "Token usage changed by {change_percent:.1}% compared with the previous run."
+            ));
         }
-        
-        Ok(crate::models::TrendAnalysis { trends })
+        Ok(TrendAnalysis {
+            trends,
+            delta_summary,
+        })
     }
 }

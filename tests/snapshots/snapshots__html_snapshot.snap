@@ -1,0 +1,20 @@
+---
+source: tests/snapshots.rs
+assertion_line: 64
+expression: sample_report().to_html()
+---
+<html><body><pre># Test Report
+
+summary
+
+## Action items
+
+- Action
+
+## Agent findings
+
+### DeepResearcher
+
+A sample output
+
+</pre></body></html>

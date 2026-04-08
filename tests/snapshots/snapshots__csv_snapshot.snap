@@ -1,0 +1,7 @@
+---
+source: tests/snapshots.rs
+assertion_line: 59
+expression: sample_report().to_csv()
+---
+agent_name,confidence,depth,content
+DeepResearcher,88,2,A sample output
