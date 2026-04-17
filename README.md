@@ -1,59 +1,148 @@
+<div align="center">
+
 # 🏆 BioSwarm Engine v3.5
 
-Production-ready multi-source intelligence CLI for research swarms, resumable runs, SQLite-backed history, and multi-format exports.
+**Production-ready multi-source intelligence swarm for AI-powered research**
 
-[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-3.5.0-blue.svg)]()
+[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-3.5.0-blue.svg?style=flat-square)](https://github.com/sayuru-akash/bioswarm-engine/releases)
+[![Status](https://img.shields.io/badge/status-restored%20production%20baseline-success.svg?style=flat-square)](https://github.com/sayuru-akash/bioswarm-engine)
 
-## What is included
+[Overview](#overview) • [Features](#features) • [Installation](#installation) • [Usage](#usage) • [Configuration](#configuration) • [API](#api) • [Roadmap](#roadmap)
 
-- reliable CLI with `run`, `resume`, `export`, `history`, `status`
-- resumable checkpoint flow backed by SQLite
-- schema migration bootstrap on startup
-- configurable depth, agents, output dir, database path, and export formats
-- export outputs in Markdown, JSON, HTML, and CSV
-- report deduplication, confidence scoring, executive summaries, and action extraction
-- searchable run history and trend deltas
-- REST server entrypoint for automation
-- integration tests and output snapshot tests
-- cleaned release baseline restored from the real v3 production line
+</div>
 
-## What is new in v3.5
+---
 
-- restored the correct v3 production code line after an accidental nested-folder regression
-- re-established the proper root repo layout
-- removed the temporary versioning drift to `v1.1`
-- kept the real production architecture centered on SQLite, exports, history, and resume flows
-- validated build, tests, and strict clippy on the corrected tree
-- set this as the forward-working production baseline
-
-## Quick start
+## 📸 Preview
 
 ```bash
-cp .env.sample .env
+$ bioswarm run --query "latest AI technology trends 2026" --depth 3
+
+🏆 BioSwarm v3.5 - Starting intelligence swarm...
+✅ SQLite database initialized
+✅ Search clients ready
+🤖 Spawning specialist agents...
+✅ Swarm execution complete!
+📊 Execution summary ready
+📁 Exports written: Markdown, JSON, HTML, CSV
+```
+
+---
+
+## 📋 Overview
+
+BioSwarm Engine is a **production-ready, multi-source intelligence CLI** built in Rust. It orchestrates specialist AI research flows to gather fresh intelligence, persist execution history, and export usable reports.
+
+**Current strengths:**
+- ⚡ **Production CLI flows** for run, resume, export, history, and status
+- 🔄 **Resumable runs** with SQLite-backed checkpoints
+- 📊 **Multi-format exports** in Markdown, JSON, HTML, and CSV
+- 🎯 **Confidence scoring** and executive summary generation
+- 🗄️ **Persistent history** with searchable run records and trend deltas
+- 🧪 **Tested baseline** with integration and snapshot coverage
+
+---
+
+## ✨ Features
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| 🤖 **Swarm Research Execution** | Multi-agent business intelligence orchestration | ✅ |
+| 🗄️ **SQLite Persistence** | Schema migrations, checkpoint/resume, run history | ✅ |
+| 📤 **Multi-Format Exports** | Markdown, JSON, HTML, CSV with report templates | ✅ |
+| 🔄 **Resume Flow** | Recover and continue from stored checkpoints | ✅ |
+| 📈 **Trend Analysis** | Delta summaries across multiple runs | ✅ |
+| 🎯 **Confidence Scoring** | Per-run and aggregated confidence signals | ✅ |
+| 🧹 **Deduplication** | Duplicate insight cleanup in output generation | ✅ |
+| 🔍 **Fresh Research Support** | Fireworks generation with optional Exa freshness layer | ✅ |
+| 🛡️ **Schema Migrations** | Automatic database upgrades on startup | ✅ |
+| 🧪 **Testing** | Integration tests + snapshot tests | ✅ |
+| 🌐 **REST API Server** | HTTP entrypoint for automation | ✅ |
+| 🚀 **Provider-flexible model backends** | Fireworks, Ollama, OpenAI-compatible runtime switching | 🟡 roadmap |
+
+---
+
+## 🚀 Installation
+
+### Build from Source
+
+```bash
+git clone https://github.com/sayuru-akash/bioswarm-engine.git
+cd bioswarm-engine
 cargo build --release
 cargo test
-./target/release/bioswarm run --query "ai market intelligence"
 ```
 
-## CLI examples
+### Prerequisites
+
+- **Rust** 1.75+ ([Install](https://rustup.rs))
+- **API keys:**
+  - [Fireworks AI](https://fireworks.ai) for text generation
+  - [Exa AI](https://exa.ai) optional, for fresher research/search enrichment
+
+---
+
+## 🎮 Usage
+
+### Basic Run
 
 ```bash
-bioswarm run --query "sri lanka fintech opportunities" --depth 3 --formats markdown,json,html,csv
-bioswarm history --limit 20
-bioswarm status
-bioswarm export --execution-id <id> --formats markdown,json
-bioswarm resume --execution-id <id>
+export FIREWORKS_API_KEY="your_key_here"
+bioswarm run --query "AI market trends 2026"
 ```
 
-## Config
+### Advanced Usage
 
-Environment variables or `bioswarm.toml`:
+```bash
+bioswarm run \
+  --query "sri lanka fintech opportunities" \
+  --depth 3 \
+  --formats markdown,json,html,csv \
+  --output-dir ./reports \
+  --database-path ./bioswarm.db
+
+bioswarm history --limit 20
+bioswarm status
+bioswarm export --execution-id "<id>" --formats markdown,json
+bioswarm resume --execution-id "<id>"
+```
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `run` | Execute a new swarm |
+| `resume` | Resume from a saved checkpoint |
+| `export` | Export an existing run |
+| `history` | List past runs |
+| `status` | Show current status and checkpoints |
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+```bash
+# Required
+export FIREWORKS_API_KEY="fw_..."
+
+# Optional
+export EXA_API_KEY="exa_..."
+export DATABASE_PATH="./bioswarm.db"
+export OUTPUT_DIR="./outputs"
+export RATE_LIMIT_RPM=60
+export BIOSWARM_DEPTH=2
+export RUST_LOG=info
+```
+
+### Config File (`bioswarm.toml`)
 
 ```toml
-fireworks_api_key = "..."
-exa_api_key = "..."
+fireworks_api_key = "fw_..."
+exa_api_key = "exa_..."
 rate_limit_rpm = 60
 database_path = "bioswarm.db"
 output_dir = "outputs"
@@ -61,40 +150,77 @@ depth = 2
 formats = ["markdown", "json", "html", "csv"]
 ```
 
-Required:
-- `FIREWORKS_API_KEY`
+---
 
-Optional:
-- `EXA_API_KEY`
-- `DATABASE_PATH`
-- `OUTPUT_DIR`
-- `RATE_LIMIT_RPM`
-- `BIOSWARM_DEPTH`
+## 🌐 API
 
-## Reliability work included
+BioSwarm includes an HTTP API server for automation:
 
-- schema migrations table added
-- checkpoint saving after each completed agent
-- resume flow supported from last checkpoint
-- integration tests for status and run/export path
-- snapshot tests for markdown, csv, and html outputs
-- stronger config validation with fail-fast errors
+```bash
+./target/release/bioswarm-server
+```
 
-## Packaging and release readiness
+### Endpoints
 
-- release build supported with `cargo build --release`
-- API server binary included as `bioswarm-server`
-- suitable for GitHub Actions and tagged releases
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/v1/swarm/run` | POST | Execute swarm |
+| `/api/v1/swarm/status` | GET | Get current status/checkpoints |
 
-## Repo structure
+---
 
+## 🏗️ Architecture
+
+```text
+CLI / API
+   ↓
+Orchestrator
+   ↓
+Agent execution + checkpointing
+   ↓
+Search + generation clients
+   ↓
+SQLite persistence + export pipeline
+```
+
+Core files:
 - `src/main.rs` CLI entry
 - `src/server.rs` API server
 - `src/database.rs` persistence + migrations
 - `src/orchestrator.rs` swarm execution + checkpointing
 - `src/exports.rs` export writers
-- `tests/` integration and snapshot tests
+- `tests/` integration and snapshot coverage
 
-## Attribution
+---
 
-Main author commits are configured for Sayuru Akash. Co-author credit can be added for Sayuru's OpenClaw Bot ❤️ in commit trailers when desired.
+## ✅ v3.5 restoration notes
+
+v3.5 is the corrected production baseline after a repo-history regression was removed.
+
+What was safely restored:
+- proper root repo layout
+- real v3 code line
+- tests and snapshot assets
+- export and persistence architecture
+- clean branch history on `main`
+
+---
+
+## 🛣️ Roadmap
+
+Planned next improvements:
+- provider-flexible model backend support
+- safer model capability negotiation and backend selection
+- Ollama and OpenAI-compatible runtime support
+- richer report presentation and executive dashboards
+- stronger CI/release polish
+- deeper structured extraction from model outputs
+
+Important: the roadmap items above are intentional next-step improvements, not claims that the current code already ships all of them.
+
+---
+
+## 📜 License
+
+MIT
