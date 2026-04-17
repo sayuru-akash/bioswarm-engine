@@ -1,6 +1,10 @@
-# BioSwarm Engine v3.0
+# 🏆 BioSwarm Engine v3.5
 
 Production-ready multi-source intelligence CLI for research swarms, resumable runs, SQLite-backed history, and multi-format exports.
+
+[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-3.5.0-blue.svg)]()
 
 ## What is included
 
@@ -13,6 +17,16 @@ Production-ready multi-source intelligence CLI for research swarms, resumable ru
 - searchable run history and trend deltas
 - REST server entrypoint for automation
 - integration tests and output snapshot tests
+- cleaned release baseline restored from the real v3 production line
+
+## What is new in v3.5
+
+- restored the correct v3 production code line after an accidental nested-folder regression
+- re-established the proper root repo layout
+- removed the temporary versioning drift to `v1.1`
+- kept the real production architecture centered on SQLite, exports, history, and resume flows
+- validated build, tests, and strict clippy on the corrected tree
+- set this as the forward-working production baseline
 
 ## Quick start
 
@@ -30,6 +44,7 @@ bioswarm run --query "sri lanka fintech opportunities" --depth 3 --formats markd
 bioswarm history --limit 20
 bioswarm status
 bioswarm export --execution-id <id> --formats markdown,json
+bioswarm resume --execution-id <id>
 ```
 
 ## Config
@@ -56,7 +71,7 @@ Optional:
 - `RATE_LIMIT_RPM`
 - `BIOSWARM_DEPTH`
 
-## Reliability work completed
+## Reliability work included
 
 - schema migrations table added
 - checkpoint saving after each completed agent
@@ -69,7 +84,7 @@ Optional:
 
 - release build supported with `cargo build --release`
 - API server binary included as `bioswarm-server`
-- ready for GitHub Actions and tagged releases
+- suitable for GitHub Actions and tagged releases
 
 ## Repo structure
 
