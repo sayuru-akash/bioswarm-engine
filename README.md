@@ -109,6 +109,30 @@ bioswarm export --execution-id "<id>" --formats markdown,json
 bioswarm resume --execution-id "<id>"
 ```
 
+### Backend-flexible runtime examples
+
+```bash
+# Fireworks
+export FIREWORKS_API_KEY="fw_..."
+bioswarm run --query "AI market trends" --backend fireworks --model accounts/fireworks/models/kimi-k2-instruct
+
+# Ollama
+export OLLAMA_API_KEY="local-or-placeholder"
+bioswarm run --query "AI market trends" \
+  --backend ollama \
+  --model kimi-k2.5:cloud \
+  --api-base-url http://127.0.0.1:11434/v1 \
+  --api-key-env OLLAMA_API_KEY
+
+# OpenAI-compatible
+export OPENAI_API_KEY="sk-..."
+bioswarm run --query "AI market trends" \
+  --backend openai-compatible \
+  --model gpt-4.1-mini \
+  --api-base-url https://api.openai.com/v1 \
+  --api-key-env OPENAI_API_KEY
+```
+
 ### CLI Commands
 
 | Command | Description |
@@ -148,6 +172,10 @@ database_path = "bioswarm.db"
 output_dir = "outputs"
 depth = 2
 formats = ["markdown", "json", "html", "csv"]
+backend = "fireworks"
+model = "accounts/fireworks/models/kimi-k2-instruct"
+api_base_url = "https://api.fireworks.ai/inference/v1"
+api_key_env = "FIREWORKS_API_KEY"
 ```
 
 ---
@@ -210,14 +238,13 @@ What was safely restored:
 ## 🛣️ Roadmap
 
 Planned next improvements:
-- provider-flexible model backend support
-- safer model capability negotiation and backend selection
-- Ollama and OpenAI-compatible runtime support
+- richer provider-specific capability negotiation
+- stronger retry/backoff behavior for live provider calls
 - richer report presentation and executive dashboards
 - stronger CI/release polish
 - deeper structured extraction from model outputs
 
-Important: the roadmap items above are intentional next-step improvements, not claims that the current code already ships all of them.
+Important: roadmap items above are next-step improvements beyond the currently shipped backend-flexible runtime support.
 
 ---
 

@@ -40,6 +40,7 @@ impl std::fmt::Display for ExportFormat {
 pub enum ModelBackend {
     Fireworks,
     Ollama,
+    #[value(name = "openai-compatible", alias = "open-ai-compatible")]
     OpenAiCompatible,
 }
 
