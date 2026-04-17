@@ -60,7 +60,7 @@ BioSwarm Engine is a **production-ready, multi-source intelligence CLI** built i
 | 🛡️ **Schema Migrations** | Automatic database upgrades on startup | ✅ |
 | 🧪 **Testing** | Integration tests + snapshot tests | ✅ |
 | 🌐 **REST API Server** | HTTP entrypoint for automation | ✅ |
-| 🚀 **Provider-flexible model backends** | Fireworks, Ollama, OpenAI-compatible runtime switching | 🟡 roadmap |
+| 🚀 **Provider-flexible model backends** | Fireworks, Ollama, OpenAI-compatible runtime switching | ✅ |
 
 ---
 
@@ -219,19 +219,6 @@ Core files:
 - `src/orchestrator.rs` swarm execution + checkpointing
 - `src/exports.rs` export writers
 - `tests/` integration and snapshot coverage
-
----
-
-## ✅ v3.5 restoration notes
-
-v3.5 is the corrected production baseline after a repo-history regression was removed.
-
-What was safely restored:
-- proper root repo layout
-- real v3 code line
-- tests and snapshot assets
-- export and persistence architecture
-- clean branch history on `main`
 
 ---
 
