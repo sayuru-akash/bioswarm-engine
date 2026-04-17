@@ -35,6 +35,25 @@ impl std::fmt::Display for ExportFormat {
     }
 }
 
+#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ModelBackend {
+    Fireworks,
+    Ollama,
+    OpenAiCompatible,
+}
+
+impl std::fmt::Display for ModelBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            Self::Fireworks => "fireworks",
+            Self::Ollama => "ollama",
+            Self::OpenAiCompatible => "openai-compatible",
+        };
+        write!(f, "{value}")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileConfig {
     pub fireworks_api_key: Option<String>,
@@ -45,6 +64,10 @@ pub struct FileConfig {
     pub depth: Option<u8>,
     pub agents: Option<Vec<String>>,
     pub formats: Option<Vec<ExportFormat>>,
+    pub backend: Option<ModelBackend>,
+    pub model: Option<String>,
+    pub api_base_url: Option<String>,
+    pub api_key_env: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +81,10 @@ pub struct RuntimeConfig {
     pub agents: Vec<String>,
     pub formats: Vec<ExportFormat>,
     pub query: String,
+    pub backend: ModelBackend,
+    pub model: String,
+    pub api_base_url: String,
+    pub api_key_env: String,
 }
 
 #[derive(Debug, Parser)]
@@ -89,6 +116,14 @@ pub enum Commands {
         formats: Vec<ExportFormat>,
         #[arg(long, value_delimiter = ',')]
         agents: Option<Vec<String>>,
+        #[arg(long, env = "BIOSWARM_BACKEND")]
+        backend: Option<ModelBackend>,
+        #[arg(long, env = "BIOSWARM_MODEL")]
+        model: Option<String>,
+        #[arg(long, env = "BIOSWARM_API_BASE_URL")]
+        api_base_url: Option<String>,
+        #[arg(long, env = "BIOSWARM_API_KEY_ENV")]
+        api_key_env: Option<String>,
     },
     Resume {
         #[arg(long)]
@@ -119,6 +154,7 @@ fn default_formats() -> Vec<ExportFormat> {
 }
 
 impl RuntimeConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         cli: &Cli,
         query: String,
@@ -127,6 +163,10 @@ impl RuntimeConfig {
         depth_override: Option<u8>,
         formats_override: Option<Vec<ExportFormat>>,
         agents_override: Option<Vec<String>>,
+        backend_override: Option<ModelBackend>,
+        model_override: Option<String>,
+        api_base_url_override: Option<String>,
+        api_key_env_override: Option<String>,
     ) -> Result<Self> {
         dotenvy::dotenv().ok();
 
@@ -138,17 +178,45 @@ impl RuntimeConfig {
             None
         };
 
-        let fireworks_api_key = std::env::var("FIREWORKS_API_KEY")
+        let backend = backend_override
+            .or_else(|| {
+                std::env::var("BIOSWARM_BACKEND")
+                    .ok()
+                    .and_then(|v| parse_backend(&v))
+            })
+            .or_else(|| file_config.as_ref().and_then(|cfg| cfg.backend.clone()))
+            .unwrap_or(ModelBackend::Fireworks);
+
+        let api_key_env = api_key_env_override
+            .or_else(|| std::env::var("BIOSWARM_API_KEY_ENV").ok())
+            .or_else(|| file_config.as_ref().and_then(|cfg| cfg.api_key_env.clone()))
+            .unwrap_or_else(|| match backend {
+                ModelBackend::Fireworks => "FIREWORKS_API_KEY".to_string(),
+                ModelBackend::Ollama => "OLLAMA_API_KEY".to_string(),
+                ModelBackend::OpenAiCompatible => "OPENAI_API_KEY".to_string(),
+            });
+
+        let fireworks_api_key = std::env::var(&api_key_env)
             .ok()
             .or_else(|| {
-                file_config
-                    .as_ref()
-                    .and_then(|cfg| cfg.fireworks_api_key.clone())
+                if api_key_env == "FIREWORKS_API_KEY" {
+                    file_config
+                        .as_ref()
+                        .and_then(|cfg| cfg.fireworks_api_key.clone())
+                } else {
+                    None
+                }
             })
-            .context("FIREWORKS_API_KEY is required. Add it to .env or bioswarm.toml")?;
+            .unwrap_or_else(|| {
+                if matches!(backend, ModelBackend::Ollama) {
+                    "ollama".to_string()
+                } else {
+                    String::new()
+                }
+            });
 
-        if fireworks_api_key.trim().is_empty() {
-            bail!("FIREWORKS_API_KEY cannot be empty");
+        if !matches!(backend, ModelBackend::Ollama) && fireworks_api_key.trim().is_empty() {
+            bail!("{} is required. Add it to .env or bioswarm.toml", api_key_env);
         }
 
         let exa_api_key = std::env::var("EXA_API_KEY")
@@ -173,11 +241,7 @@ impl RuntimeConfig {
 
         let database_path = db_override
             .or_else(|| std::env::var("DATABASE_PATH").ok().map(PathBuf::from))
-            .or_else(|| {
-                file_config
-                    .as_ref()
-                    .and_then(|cfg| cfg.database_path.clone())
-            })
+            .or_else(|| file_config.as_ref().and_then(|cfg| cfg.database_path.clone()))
             .unwrap_or_else(|| PathBuf::from("bioswarm.db"));
 
         let output_dir = output_override
@@ -186,11 +250,7 @@ impl RuntimeConfig {
             .unwrap_or_else(|| PathBuf::from("outputs"));
 
         let depth = depth_override
-            .or_else(|| {
-                std::env::var("BIOSWARM_DEPTH")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-            })
+            .or_else(|| std::env::var("BIOSWARM_DEPTH").ok().and_then(|v| v.parse().ok()))
             .or_else(|| file_config.as_ref().and_then(|cfg| cfg.depth))
             .unwrap_or(2);
 
@@ -206,6 +266,24 @@ impl RuntimeConfig {
             .or_else(|| file_config.as_ref().and_then(|cfg| cfg.formats.clone()))
             .unwrap_or_else(default_formats);
 
+        let model = model_override
+            .or_else(|| std::env::var("BIOSWARM_MODEL").ok())
+            .or_else(|| file_config.as_ref().and_then(|cfg| cfg.model.clone()))
+            .unwrap_or_else(|| match backend {
+                ModelBackend::Fireworks => "accounts/fireworks/models/kimi-k2-instruct".to_string(),
+                ModelBackend::Ollama => "kimi-k2.5:cloud".to_string(),
+                ModelBackend::OpenAiCompatible => "gpt-4.1-mini".to_string(),
+            });
+
+        let api_base_url = api_base_url_override
+            .or_else(|| std::env::var("BIOSWARM_API_BASE_URL").ok())
+            .or_else(|| file_config.as_ref().and_then(|cfg| cfg.api_base_url.clone()))
+            .unwrap_or_else(|| match backend {
+                ModelBackend::Fireworks => "https://api.fireworks.ai/inference/v1".to_string(),
+                ModelBackend::Ollama => "http://127.0.0.1:11434/v1".to_string(),
+                ModelBackend::OpenAiCompatible => "https://api.openai.com/v1".to_string(),
+            });
+
         Ok(Self {
             fireworks_api_key,
             exa_api_key,
@@ -216,6 +294,10 @@ impl RuntimeConfig {
             agents,
             formats,
             query,
+            backend,
+            model,
+            api_base_url,
+            api_key_env,
         })
     }
 }
@@ -246,4 +328,15 @@ fn load_file_config(path: &Path) -> Result<FileConfig> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read config file {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+fn parse_backend(value: &str) -> Option<ModelBackend> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "fireworks" => Some(ModelBackend::Fireworks),
+        "ollama" => Some(ModelBackend::Ollama),
+        "openai" | "openai-compatible" | "openai_compatible" => {
+            Some(ModelBackend::OpenAiCompatible)
+        }
+        _ => None,
+    }
 }

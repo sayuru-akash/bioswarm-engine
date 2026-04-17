@@ -1,3 +1,4 @@
+use crate::config::ModelBackend;
 use crate::models::SearchResult;
 use anyhow::{Context, Result};
 use reqwest::Client;
@@ -53,26 +54,52 @@ impl ExaSearchClient {
 pub struct FireworksClient {
     _client: Client,
     _api_key: String,
+    backend: ModelBackend,
+    model: String,
+    api_base_url: String,
 }
 
 impl FireworksClient {
-    pub fn new(api_key: String) -> Result<Self> {
+    pub fn new(
+        api_key: String,
+        backend: ModelBackend,
+        model: String,
+        api_base_url: String,
+    ) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(60))
             .build()
-            .context("failed to create Fireworks HTTP client")?;
+            .context("failed to create model HTTP client")?;
         Ok(Self {
             _client: client,
             _api_key: api_key,
+            backend,
+            model,
+            api_base_url,
         })
     }
 
     pub async fn generate(&self, prompt: &str, system: Option<&str>) -> Result<String> {
         let prefix = system.unwrap_or("Strategic research synthesis");
         Ok(format!(
-            "{prefix}\n\nSynthesis:\n- {}\n- Confidence weighted against source freshness\n- Recommended next action included",
-            prompt.lines().next().unwrap_or(prompt)
+            "[{backend}:{model}] via {base}\n\n{prefix}\n\nSynthesis:\n- {}\n- Confidence weighted against source freshness\n- Recommended next action included",
+            prompt.lines().next().unwrap_or(prompt),
+            backend = self.backend,
+            model = self.model,
+            base = self.api_base_url,
         ))
+    }
+
+    pub fn backend(&self) -> &ModelBackend {
+        &self.backend
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub fn api_base_url(&self) -> &str {
+        &self.api_base_url
     }
 }
 

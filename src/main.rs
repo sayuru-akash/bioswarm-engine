@@ -22,6 +22,10 @@ async fn main() -> Result<()> {
             depth,
             formats,
             agents,
+            backend,
+            model,
+            api_base_url,
+            api_key_env,
         } => {
             let cli_stub = Cli {
                 config: config_path.clone(),
@@ -35,9 +39,13 @@ async fn main() -> Result<()> {
                 Some(depth),
                 Some(formats),
                 agents,
+                backend,
+                model,
+                api_base_url,
+                api_key_env,
             )?;
             let progress = indicatif::ProgressBar::new_spinner();
-            progress.set_message("running bioswarm agents");
+            progress.set_message(format!("running bioswarm agents via {} / {}", config.backend, config.model));
             progress.enable_steady_tick(std::time::Duration::from_millis(120));
             let report = bioswarm_engine::execute_run(config).await?;
             progress.finish_with_message(format!("completed {}", report.execution_id));
@@ -92,6 +100,9 @@ async fn main() -> Result<()> {
                 .unwrap_or_else(|_| "bioswarm.db".into());
             let (runs, checkpoint) = bioswarm_engine::status(&db_path).await?;
             println!("recent runs: {}", runs.len());
+            if let Some(run) = runs.first() {
+                println!("latest status: {} | confidence: {}", run.status, run.confidence_score);
+            }
             if let Some(checkpoint) = checkpoint {
                 println!(
                     "checkpoint: {} (remaining agents: {})",

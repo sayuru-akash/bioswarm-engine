@@ -17,6 +17,9 @@ pub async fn execute_run(config: config::RuntimeConfig) -> Result<models::Enhanc
     let search_client = Arc::new(search::ExaSearchClient::new(config.exa_api_key.clone())?);
     let ai_client = Arc::new(search::FireworksClient::new(
         config.fireworks_api_key.clone(),
+        config.backend.clone(),
+        config.model.clone(),
+        config.api_base_url.clone(),
     )?);
     let checkpoint = db.get_latest_checkpoint().await?;
     let execution_id = checkpoint
@@ -99,7 +102,7 @@ async fn generate_report(
     let charts = utils::generate_ascii_charts(results).await?;
     let confidence_score = utils::confidence_score(results);
     Ok(models::EnhancedReport {
-        title: format!("BioSwarm v3.0 report - {}", config.query),
+        title: format!("BioSwarm v3.5 report - {}", config.query),
         execution_id: results.execution_id.clone(),
         timestamp: results.timestamp,
         summary,
@@ -123,6 +126,9 @@ async fn generate_report(
                 .collect(),
             output_dir: config.output_dir.display().to_string(),
             resumed: false,
+            backend: config.backend.to_string(),
+            model: config.model.clone(),
+            api_base_url: config.api_base_url.clone(),
         },
     })
 }

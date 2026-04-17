@@ -62,6 +62,9 @@ pub struct RunMetadata {
     pub formats: Vec<String>,
     pub output_dir: String,
     pub resumed: bool,
+    pub backend: String,
+    pub model: String,
+    pub api_base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

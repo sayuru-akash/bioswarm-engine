@@ -33,6 +33,10 @@ async fn run_swarm(req: web::Json<RunRequest>) -> impl Responder {
         Some(2),
         Some(vec![ExportFormat::Markdown, ExportFormat::Json]),
         Some(default_agents()),
+        None,
+        None,
+        None,
+        None,
     );
 
     match config {

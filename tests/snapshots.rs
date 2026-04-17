@@ -45,6 +45,9 @@ fn sample_report() -> EnhancedReport {
             formats: vec!["Markdown".into()],
             output_dir: "outputs".into(),
             resumed: false,
+            backend: "fireworks".into(),
+            model: "accounts/fireworks/models/kimi-k2-instruct".into(),
+            api_base_url: "https://api.fireworks.ai/inference/v1".into(),
         },
     }
 }
