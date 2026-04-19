@@ -1,4 +1,4 @@
-use crate::models::{AgentOutput, EnhancedReport, SwarmResults, TrendAnalysis};
+use crate::models::{AgentOutput, EnhancedReport, SearchResult, SwarmResults, TrendAnalysis};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -90,6 +90,18 @@ pub fn deduplicate_agent_outputs(
 
 pub fn confidence_score(results: &SwarmResults) -> u8 {
     average_confidence(results)
+}
+
+pub fn deduplicate_search_results(results: Vec<SearchResult>) -> Vec<SearchResult> {
+    let mut seen = BTreeSet::new();
+    let mut deduped = Vec::new();
+    for result in results {
+        let key = format!("{}|{}", result.title, result.url);
+        if seen.insert(key) {
+            deduped.push(result);
+        }
+    }
+    deduped
 }
 
 fn average_confidence(results: &SwarmResults) -> u8 {

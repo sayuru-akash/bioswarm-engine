@@ -136,6 +136,12 @@ pub struct FireworksClient {
     api_base_url: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ToolCallRequest {
+    pub name: String,
+    pub arguments: Value,
+}
+
 impl FireworksClient {
     pub fn new(
         api_key: String,
@@ -187,6 +193,65 @@ impl FireworksClient {
         bail!("model generation exhausted retries: {}", last_error)
     }
 
+    pub async fn generate_with_tools(
+        &self,
+        prompt: &str,
+        system: Option<&str>,
+        tools: &[Value],
+    ) -> Result<(Option<String>, Vec<ToolCallRequest>)> {
+        if is_test_key(&self.api_key) {
+            bail!("model API key missing or invalid for live generation");
+        }
+
+        let mut messages = Vec::new();
+        if let Some(system) = system {
+            messages.push(json!({ "role": "system", "content": system }));
+        }
+        messages.push(json!({ "role": "user", "content": prompt }));
+
+        let body = self
+            .send_chat_completion(json!({
+                "model": self.model,
+                "messages": messages,
+                "temperature": 0.3,
+                "tools": tools,
+                "tool_choice": "auto",
+                "parallel_tool_calls": false
+            }))
+            .await?;
+
+        let message = body
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|choices| choices.first())
+            .and_then(|choice| choice.get("message"))
+            .ok_or_else(|| anyhow!("generation response missing choices[0].message"))?;
+
+        let content = message
+            .get("content")
+            .and_then(Value::as_str)
+            .map(ToString::to_string);
+
+        let tool_calls = message
+            .get("tool_calls")
+            .and_then(Value::as_array)
+            .map(|calls| {
+                calls
+                    .iter()
+                    .filter_map(|call| {
+                        let function = call.get("function")?;
+                        let name = function.get("name")?.as_str()?.to_string();
+                        let arguments_text = function.get("arguments")?.as_str()?;
+                        let arguments = serde_json::from_str::<Value>(arguments_text).ok()?;
+                        Some(ToolCallRequest { name, arguments })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Ok((content, tool_calls))
+    }
+
     async fn live_generate(&self, prompt: &str, system: Option<&str>) -> Result<String> {
         let mut messages = Vec::new();
         if let Some(system) = system {
@@ -194,33 +259,13 @@ impl FireworksClient {
         }
         messages.push(json!({ "role": "user", "content": prompt }));
 
-        let url = format!("{}/chat/completions", self.api_base_url.trim_end_matches('/'));
-        let request = self
-            .client
-            .post(url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(&json!({
+        let body = self
+            .send_chat_completion(json!({
                 "model": self.model,
                 "messages": messages,
                 "temperature": 0.3
-            }));
-
-        let response = request
-            .send()
-            .await
-            .context("failed to send model generation request")?;
-
-        if response.status().as_u16() == 429 {
-            bail!("model generation failed with status 429 Too Many Requests");
-        }
-        if !response.status().is_success() {
-            bail!("model generation failed with status {}", response.status());
-        }
-
-        let body: Value = response
-            .json()
-            .await
-            .context("failed to parse generation response")?;
+            }))
+            .await?;
 
         let content = body
             .get("choices")
@@ -232,6 +277,30 @@ impl FireworksClient {
             .ok_or_else(|| anyhow!("generation response missing choices[0].message.content"))?;
 
         Ok(content.to_string())
+    }
+
+    async fn send_chat_completion(&self, payload: Value) -> Result<Value> {
+        let url = format!("{}/chat/completions", self.api_base_url.trim_end_matches('/'));
+        let response = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&payload)
+            .send()
+            .await
+            .context("failed to send model generation request")?;
+
+        if response.status().as_u16() == 429 {
+            bail!("model generation failed with status 429 Too Many Requests");
+        }
+        if !response.status().is_success() {
+            bail!("model generation failed with status {}", response.status());
+        }
+
+        response
+            .json()
+            .await
+            .context("failed to parse generation response")
     }
 
     pub fn backend(&self) -> &ModelBackend {

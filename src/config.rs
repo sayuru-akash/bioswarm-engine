@@ -42,6 +42,8 @@ pub enum ModelBackend {
     Ollama,
     #[value(name = "openai-compatible", alias = "open-ai-compatible")]
     OpenAiCompatible,
+    #[value(name = "codex")]
+    Codex,
 }
 
 impl std::fmt::Display for ModelBackend {
@@ -50,6 +52,7 @@ impl std::fmt::Display for ModelBackend {
             Self::Fireworks => "fireworks",
             Self::Ollama => "ollama",
             Self::OpenAiCompatible => "openai-compatible",
+            Self::Codex => "codex",
         };
         write!(f, "{value}")
     }
@@ -195,6 +198,7 @@ impl RuntimeConfig {
                 ModelBackend::Fireworks => "FIREWORKS_API_KEY".to_string(),
                 ModelBackend::Ollama => "OLLAMA_API_KEY".to_string(),
                 ModelBackend::OpenAiCompatible => "OPENAI_API_KEY".to_string(),
+                ModelBackend::Codex => "OPENAI_API_KEY".to_string(),
             });
 
         let fireworks_api_key = std::env::var(&api_key_env)
@@ -274,6 +278,7 @@ impl RuntimeConfig {
                 ModelBackend::Fireworks => "accounts/fireworks/models/kimi-k2-instruct".to_string(),
                 ModelBackend::Ollama => "kimi-k2.5:cloud".to_string(),
                 ModelBackend::OpenAiCompatible => "gpt-4.1-mini".to_string(),
+                ModelBackend::Codex => "gpt-5-codex".to_string(),
             });
 
         let api_base_url = api_base_url_override
@@ -283,6 +288,7 @@ impl RuntimeConfig {
                 ModelBackend::Fireworks => "https://api.fireworks.ai/inference/v1".to_string(),
                 ModelBackend::Ollama => "http://127.0.0.1:11434/v1".to_string(),
                 ModelBackend::OpenAiCompatible => "https://api.openai.com/v1".to_string(),
+                ModelBackend::Codex => "https://api.openai.com/v1".to_string(),
             });
 
         Ok(Self {
@@ -338,6 +344,7 @@ fn parse_backend(value: &str) -> Option<ModelBackend> {
         "openai" | "openai-compatible" | "openai_compatible" => {
             Some(ModelBackend::OpenAiCompatible)
         }
+        "codex" => Some(ModelBackend::Codex),
         _ => None,
     }
 }

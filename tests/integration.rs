@@ -98,3 +98,32 @@ fn run_command_supports_openai_compatible_backend_flags() {
         .stdout(predicate::str::contains("BioSwarm v3.5 report"))
         .stdout(predicate::str::contains("Agents failed: 14"));
 }
+
+#[test]
+fn run_command_supports_codex_backend_flags() {
+    let temp = tempdir().unwrap();
+    let out = temp.path().join("out-codex");
+    let db_path = temp.path().join("test-codex.db");
+    Command::cargo_bin("bioswarm")
+        .unwrap()
+        .env("OPENAI_API_KEY", "test-openai")
+        .arg("run")
+        .arg("--query")
+        .arg("codex backend check")
+        .arg("--backend")
+        .arg("codex")
+        .arg("--model")
+        .arg("gpt-5-codex")
+        .arg("--api-base-url")
+        .arg("https://api.openai.com/v1")
+        .arg("--api-key-env")
+        .arg("OPENAI_API_KEY")
+        .arg("--output-dir")
+        .arg(&out)
+        .arg("--database-path")
+        .arg(&db_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("BioSwarm v3.5 report"))
+        .stdout(predicate::str::contains("Agents failed: 14"));
+}
