@@ -15,15 +15,28 @@ pub async fn generate_executive_summary(
         .map(|output| format!("{} ({})", output.agent_name, output.confidence))
         .collect::<Vec<_>>()
         .join(", ");
+    let top_agents = if top_agents.is_empty() {
+        "none".to_string()
+    } else {
+        top_agents
+    };
 
     let mut out = format!(
-        "## Executive summary\n\n- Query: {}\n- Agents completed: {}\n- Duration: {} ms\n- Confidence score: {}\n- Strongest contributors: {}\n",
+        "## Executive summary\n\n- Query: {}\n- Agents completed: {}\n- Agents failed: {}\n- Duration: {} ms\n- Confidence score: {}\n- Strongest contributors: {}\n",
         results.query,
         results.agent_outputs.len(),
+        results.failed_agents.len(),
         results.duration_ms,
         avg_conf,
         top_agents
     );
+
+    if !results.failed_agents.is_empty() {
+        out.push_str("\n### Failures\n");
+        for failure in results.failed_agents.iter().take(5) {
+            out.push_str(&format!("- {}: {}\n", failure.agent_name, failure.error));
+        }
+    }
 
     if !trends.delta_summary.is_empty() {
         out.push_str("\n### Trend deltas\n");
@@ -117,7 +130,9 @@ impl EnhancedReport {
             }
             out.push('\n');
         }
-        out.push_str("## Agent findings\n\n");
+        if !self.agent_outputs.is_empty() {
+            out.push_str("## Agent findings\n\n");
+        }
         for output in self.agent_outputs.values() {
             out.push_str(&format!(
                 "### {}\n\n{}\n\n",

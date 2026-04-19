@@ -1,6 +1,6 @@
 use crate::config::RuntimeConfig;
 use crate::database::Database;
-use crate::models::{AgentOutput, Checkpoint, Insight, SearchResult, SwarmResults};
+use crate::models::{AgentFailure, AgentOutput, Checkpoint, Insight, SearchResult, SwarmResults};
 use crate::search::{ExaSearchClient, FireworksClient};
 use crate::utils;
 use anyhow::Result;
@@ -32,21 +32,49 @@ pub async fn run_enhanced_swarm(
     let mut outputs = BTreeMap::new();
     let mut completed = Vec::new();
     let mut remaining = config.agents.clone();
+    let mut failures = Vec::new();
 
     while let Some(result) = join_set.join_next().await {
-        let output = result??;
-        remaining.retain(|name| name != &output.agent_name);
-        completed.push(output.agent_name.clone());
-        outputs.insert(output.agent_name.clone(), output.clone());
-        let checkpoint = Checkpoint {
-            execution_id: execution_id.to_string(),
-            query: config.query.clone(),
-            completed_agents: completed.clone(),
-            remaining_agents: remaining.clone(),
-            partial_results: outputs.clone(),
-            timestamp: Utc::now(),
-        };
-        db.save_checkpoint(&checkpoint).await?;
+        match result {
+            Ok(Ok(output)) => {
+                remaining.retain(|name| name != &output.agent_name);
+                completed.push(output.agent_name.clone());
+                outputs.insert(output.agent_name.clone(), output.clone());
+                let checkpoint = Checkpoint {
+                    execution_id: execution_id.to_string(),
+                    query: config.query.clone(),
+                    completed_agents: completed.clone(),
+                    remaining_agents: remaining.clone(),
+                    partial_results: outputs.clone(),
+                    timestamp: Utc::now(),
+                };
+                db.save_checkpoint(&checkpoint).await?;
+            }
+            Ok(Err(error)) => {
+                let error_text = error.to_string();
+                if let Some(agent_name) = config
+                    .agents
+                    .iter()
+                    .find(|candidate| error_text.contains(candidate.as_str()))
+                    .cloned()
+                {
+                    remaining.retain(|name| name != &agent_name);
+                    failures.push(AgentFailure {
+                        agent_name,
+                        error: error_text,
+                    });
+                } else {
+                    failures.push(AgentFailure {
+                        agent_name: "unknown".to_string(),
+                        error: error_text,
+                    });
+                }
+            }
+            Err(join_error) => failures.push(AgentFailure {
+                agent_name: "unknown".to_string(),
+                error: join_error.to_string(),
+            }),
+        }
     }
 
     let outputs = utils::deduplicate_agent_outputs(outputs);
@@ -54,6 +82,7 @@ pub async fn run_enhanced_swarm(
         execution_id: execution_id.to_string(),
         timestamp: Utc::now(),
         query: config.query.clone(),
+        failed_agents: failures,
         total_tokens: (outputs.len() as u64) * 1200,
         duration_ms: start.elapsed().as_millis() as u64,
         agent_outputs: outputs,
@@ -95,6 +124,7 @@ pub async fn resume_swarm(
         execution_id: checkpoint.execution_id.clone(),
         timestamp: Utc::now(),
         query: checkpoint.query.clone(),
+        failed_agents: Vec::new(),
         total_tokens: (outputs.len() as u64) * 1200,
         duration_ms: start.elapsed().as_millis() as u64,
         agent_outputs: utils::deduplicate_agent_outputs(outputs),
@@ -109,14 +139,18 @@ async fn execute_agent(
     ai: &Arc<FireworksClient>,
 ) -> Result<AgentOutput> {
     let start = std::time::Instant::now();
-    let sources = search.search(query, agent_name).await?;
+    let sources = search
+        .search(query, agent_name)
+        .await
+        .map_err(|error| anyhow::anyhow!("agent {} search failed: {}", agent_name, error))?;
     let prompt = format!("Agent {agent_name} researching {query} at depth {depth}");
     let synthesis = ai
         .generate(
             &prompt,
             Some("Deliver concise, differentiated, actionable research"),
         )
-        .await?;
+        .await
+        .map_err(|error| anyhow::anyhow!("agent {} generation failed: {}", agent_name, error))?;
     let insights = build_insights(agent_name, query, &sources, depth);
 
     Ok(AgentOutput {

@@ -33,11 +33,18 @@ pub struct AgentOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentFailure {
+    pub agent_name: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwarmResults {
     pub execution_id: String,
     pub timestamp: DateTime<Utc>,
     pub query: String,
     pub agent_outputs: BTreeMap<String, AgentOutput>,
+    pub failed_agents: Vec<AgentFailure>,
     pub total_tokens: u64,
     pub duration_ms: u64,
 }

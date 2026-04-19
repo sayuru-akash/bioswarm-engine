@@ -5,6 +5,11 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use std::time::Duration;
 
+const EXA_MAX_RETRIES: u32 = 5;
+const EXA_BASE_DELAY_MS: u64 = 1000;
+const MODEL_MAX_RETRIES: u32 = 5;
+const MODEL_BASE_DELAY_MS: u64 = 1000;
+
 #[derive(Clone)]
 pub struct ExaSearchClient {
     client: Client,
@@ -21,22 +26,47 @@ impl ExaSearchClient {
     }
 
     pub async fn search(&self, query: &str, agent_name: &str) -> Result<Vec<SearchResult>> {
-        if let Some(api_key) = self
+        let api_key = self
             .api_key
             .as_ref()
             .filter(|key| !key.trim().is_empty() && !is_test_key(key))
-        {
-            match self.live_search(query, agent_name, api_key).await {
-                Ok(results) if !results.is_empty() => return Ok(results),
-                Ok(_) => {}
-                Err(_) => {}
-            }
-        }
+            .ok_or_else(|| anyhow!("EXA_API_KEY missing or invalid for live search"))?;
 
-        Ok(mock_search_results(query, agent_name, if self.api_key.is_some() { "exa-fallback" } else { "mock-exa" }))
+        let results = self.live_search(query, agent_name, api_key).await?;
+        if results.is_empty() {
+            bail!("Exa returned no results for agent {}", agent_name);
+        }
+        Ok(results)
     }
 
     async fn live_search(&self, query: &str, agent_name: &str, api_key: &str) -> Result<Vec<SearchResult>> {
+        let mut last_error = anyhow!("Exa search gave up after {} retries", EXA_MAX_RETRIES);
+        for attempt in 0..EXA_MAX_RETRIES {
+            match self.live_search_once(query, agent_name, api_key).await {
+                Ok(results) if !results.is_empty() => return Ok(results),
+                Ok(_) => {
+                    last_error = anyhow!("Exa returned empty results for agent {}", agent_name);
+                }
+                Err(error) if error.to_string().contains("429") => {
+                    let delay = EXA_BASE_DELAY_MS * (1_u64 << attempt).min(32);
+                    tracing::warn!(
+                        "Exa rate-limited on attempt {} for agent {}, retrying in {}ms",
+                        attempt + 1,
+                        agent_name,
+                        delay
+                    );
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                    last_error = error;
+                }
+                Err(error) => {
+                    bail!("Exa search failed for agent {}: {}", agent_name, error);
+                }
+            }
+        }
+        bail!("Exa search exhausted retries for agent {}: {}", agent_name, last_error)
+    }
+
+    async fn live_search_once(&self, query: &str, agent_name: &str, api_key: &str) -> Result<Vec<SearchResult>> {
         let response = self
             .client
             .post("https://api.exa.ai/search")
@@ -53,6 +83,9 @@ impl ExaSearchClient {
             .await
             .context("failed to send Exa search request")?;
 
+        if response.status().as_u16() == 429 {
+            bail!("Exa search failed with status 429 Too Many Requests");
+        }
         if !response.status().is_success() {
             bail!("Exa search failed with status {}", response.status());
         }
@@ -124,21 +157,34 @@ impl FireworksClient {
     }
 
     pub async fn generate(&self, prompt: &str, system: Option<&str>) -> Result<String> {
-        if !is_test_key(&self.api_key) {
-            match self.live_generate(prompt, system).await {
-                Ok(content) if !content.trim().is_empty() => return Ok(content),
-                Ok(_) => {}
-                Err(_) => {}
-            }
+        if is_test_key(&self.api_key) {
+            bail!("model API key missing or invalid for live generation");
         }
 
-        Ok(mock_generation(
-            &self.backend,
-            &self.model,
-            &self.api_base_url,
-            prompt,
-            system,
-        ))
+        let mut last_error = anyhow!("model generation gave up after {} retries", MODEL_MAX_RETRIES);
+        for attempt in 0..MODEL_MAX_RETRIES {
+            match self.live_generate(prompt, system).await {
+                Ok(content) if !content.trim().is_empty() => return Ok(content),
+                Ok(_) => {
+                    last_error = anyhow!("model generation returned empty content");
+                }
+                Err(error) if error.to_string().contains("429") => {
+                    let delay = MODEL_BASE_DELAY_MS * (1_u64 << attempt).min(32);
+                    tracing::warn!(
+                        "model rate-limited on attempt {} for backend {}, retrying in {}ms",
+                        attempt + 1,
+                        self.backend,
+                        delay
+                    );
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                    last_error = error;
+                }
+                Err(error) => {
+                    bail!("model generation failed: {}", error);
+                }
+            }
+        }
+        bail!("model generation exhausted retries: {}", last_error)
     }
 
     async fn live_generate(&self, prompt: &str, system: Option<&str>) -> Result<String> {
@@ -164,6 +210,9 @@ impl FireworksClient {
             .await
             .context("failed to send model generation request")?;
 
+        if response.status().as_u16() == 429 {
+            bail!("model generation failed with status 429 Too Many Requests");
+        }
         if !response.status().is_success() {
             bail!("model generation failed with status {}", response.status());
         }
@@ -198,45 +247,6 @@ impl FireworksClient {
     }
 }
 
-fn mock_search_results(query: &str, agent_name: &str, source: &str) -> Vec<SearchResult> {
-    vec![
-        SearchResult {
-            title: format!("{agent_name} primary signal for {query}"),
-            url: format!("https://example.com/{agent_name}/{}", slugify(query)),
-            snippet: format!("Fresh market signal gathered for {query} using {source}."),
-            source: source.to_string(),
-            published_date: Some(chrono::Utc::now().date_naive().to_string()),
-        },
-        SearchResult {
-            title: format!("{agent_name} secondary signal for {query}"),
-            url: format!(
-                "https://example.com/{agent_name}/{}/secondary",
-                slugify(query)
-            ),
-            snippet: "Cross-validated competitive context and trend notes.".to_string(),
-            source: source.to_string(),
-            published_date: Some(chrono::Utc::now().date_naive().to_string()),
-        },
-    ]
-}
-
-fn mock_generation(
-    backend: &ModelBackend,
-    model: &str,
-    api_base_url: &str,
-    prompt: &str,
-    system: Option<&str>,
-) -> String {
-    let prefix = system.unwrap_or("Strategic research synthesis");
-    format!(
-        "[{backend}:{model}] via {base}\n\n{prefix}\n\nSynthesis:\n- {}\n- Confidence weighted against source freshness\n- Recommended next action included",
-        prompt.lines().next().unwrap_or(prompt),
-        backend = backend,
-        model = model,
-        base = api_base_url,
-    )
-}
-
 fn is_test_key(value: &str) -> bool {
     let lowered = value.trim().to_ascii_lowercase();
     lowered.is_empty()
@@ -244,21 +254,4 @@ fn is_test_key(value: &str) -> bool {
         || lowered.starts_with("test-")
         || lowered.contains("dummy")
         || lowered.contains("example")
-}
-
-fn slugify(input: &str) -> String {
-    input
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
 }

@@ -63,6 +63,66 @@ impl Database {
             );
             COMMIT;"
         )?;
+
+        let checkpoint_columns = {
+            let mut stmt = conn.prepare("PRAGMA table_info(checkpoints)")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        if !checkpoint_columns.iter().any(|column| column == "query") {
+            conn.execute_batch(
+                "ALTER TABLE checkpoints RENAME TO checkpoints_legacy;
+                CREATE TABLE checkpoints (
+                    execution_id TEXT PRIMARY KEY,
+                    query TEXT NOT NULL,
+                    completed_agents TEXT NOT NULL,
+                    remaining_agents TEXT NOT NULL,
+                    partial_results TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
+                INSERT INTO checkpoints (execution_id, query, completed_agents, remaining_agents, partial_results, timestamp)
+                SELECT execution_id, '', completed_agents, remaining_agents, partial_results, timestamp
+                FROM checkpoints_legacy;
+                DROP TABLE checkpoints_legacy;"
+            )?;
+        }
+
+        let execution_columns = {
+            let mut stmt = conn.prepare("PRAGMA table_info(executions)")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        if !execution_columns.iter().any(|column| column == "query")
+            || !execution_columns.iter().any(|column| column == "confidence_score")
+        {
+            conn.execute_batch(
+                "ALTER TABLE executions RENAME TO executions_legacy;
+                CREATE TABLE executions (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    query TEXT NOT NULL,
+                    duration_ms INTEGER NOT NULL,
+                    total_tokens INTEGER NOT NULL,
+                    confidence_score INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    report_markdown TEXT NOT NULL,
+                    report_json TEXT NOT NULL
+                );
+                INSERT INTO executions (id, timestamp, query, duration_ms, total_tokens, confidence_score, status, report_markdown, report_json)
+                SELECT id, timestamp, '', duration_ms, total_tokens, 0, status, COALESCE(report_markdown, ''), COALESCE(report_json, '{}')
+                FROM executions_legacy;
+                DROP TABLE executions_legacy;"
+            )?;
+        }
+
+        let agent_columns = {
+            let mut stmt = conn.prepare("PRAGMA table_info(agent_outputs)")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        if !agent_columns.iter().any(|column| column == "sources_json") {
+            conn.execute("ALTER TABLE agent_outputs ADD COLUMN sources_json TEXT NOT NULL DEFAULT '[]'", [])?;
+        }
         Ok(())
     }
 
