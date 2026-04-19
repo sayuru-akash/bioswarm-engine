@@ -210,14 +210,14 @@ impl FireworksClient {
         messages.push(json!({ "role": "user", "content": prompt }));
 
         let body = self
-            .send_chat_completion(json!({
-                "model": self.model,
-                "messages": messages,
-                "temperature": 0.3,
-                "tools": tools,
-                "tool_choice": "auto",
-                "parallel_tool_calls": false
-            }))
+            .send_chat_completion(self.build_generation_payload(
+                messages,
+                Some(json!({
+                    "tools": tools,
+                    "tool_choice": "auto",
+                    "parallel_tool_calls": false
+                })),
+            ))
             .await?;
 
         let message = body
@@ -260,11 +260,7 @@ impl FireworksClient {
         messages.push(json!({ "role": "user", "content": prompt }));
 
         let body = self
-            .send_chat_completion(json!({
-                "model": self.model,
-                "messages": messages,
-                "temperature": 0.3
-            }))
+            .send_chat_completion(self.build_generation_payload(messages, None))
             .await?;
 
         let content = body
@@ -277,6 +273,32 @@ impl FireworksClient {
             .ok_or_else(|| anyhow!("generation response missing choices[0].message.content"))?;
 
         Ok(content.to_string())
+    }
+
+    fn build_generation_payload(&self, messages: Vec<Value>, extras: Option<Value>) -> Value {
+        let mut payload = json!({
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": self.max_output_tokens(),
+        });
+
+        if let Some(extras) = extras.and_then(|value| value.as_object().cloned()) {
+            if let Some(map) = payload.as_object_mut() {
+                for (key, value) in extras {
+                    map.insert(key, value);
+                }
+            }
+        }
+
+        payload
+    }
+
+    fn max_output_tokens(&self) -> u32 {
+        match self.backend {
+            ModelBackend::Codex | ModelBackend::OpenAiCompatible => 512,
+            ModelBackend::Fireworks | ModelBackend::Ollama => 1024,
+        }
     }
 
     async fn send_chat_completion(&self, payload: Value) -> Result<Value> {

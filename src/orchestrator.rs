@@ -163,7 +163,7 @@ async fn execute_agent(
     });
 
     let synthesis = match ai.generate_with_tools(&prompt, system, &[tool_schema]).await {
-        Ok((content, tool_calls)) if !tool_calls.is_empty() => {
+        Ok((_content, tool_calls)) if !tool_calls.is_empty() => {
             apply_tool_calls(&mut sources, search, agent_name, &tool_calls).await?;
             ai.generate(
                 &format!(
